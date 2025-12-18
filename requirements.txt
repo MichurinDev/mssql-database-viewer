@@ -1,0 +1,9 @@
+SQLAlchemy>=1.4
+pymssql
+python-dotenv
+fastapi
+uvicorn[standard]
+requests
+alembic
+pytest
+httpx
