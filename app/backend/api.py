@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Depends, HTTPException, Query
+from contextlib import asynccontextmanager
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import func, select
@@ -10,7 +11,14 @@ from . import schemas
 from .models import models
 
 
-app = FastAPI(title="MSSQL Database Viewer API")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # create tables on startup
+    Base.metadata.create_all(bind=engine)
+    yield
+
+
+app = FastAPI(title="MSSQL Database Viewer API", lifespan=lifespan)
 
 
 def get_db():
@@ -21,21 +29,15 @@ def get_db():
         db.close()
 
 
-@app.on_event("startup")
-def on_startup():
-    # создать таблицы, если их ещё нет
-    Base.metadata.create_all(bind=engine)
-
-
 # --- Проекты ---
-@app.post("/projects/", response_model=schemas.ProjectRead)
+@app.post("/projects/", response_model=schemas.ProjectRead, tags=["Projects"])
 def create_project(data: schemas.ProjectCreate, db: Session = Depends(get_db)):
     """Создать проект"""
-    proj = crud_mod.create_project(db, data.dict())
+    proj = crud_mod.create_project(db, data.model_dump())
     return proj
 
 
-@app.get("/projects/", response_model=List[schemas.ProjectRead])
+@app.get("/projects/", response_model=List[schemas.ProjectRead], tags=["Projects"])
 def list_projects(
     db: Session = Depends(get_db),
     name: Optional[str] = Query(None, description="Фильтр по имени проекта (подстрока)"),
@@ -68,7 +70,7 @@ def list_projects(
     return q.all()
 
 
-@app.get("/projects/aggregate")
+@app.get("/projects/aggregate", tags=["Projects"])
 def projects_aggregate(db: Session = Depends(get_db)):
     """Простейшие агрегаты по проектам: count, sum бюджета"""
     total = db.query(func.count(models.Project.id)).scalar()
@@ -76,7 +78,7 @@ def projects_aggregate(db: Session = Depends(get_db)):
     return {"count": total or 0, "sum_budget": float(sum_budget or 0)}
 
 
-@app.get("/projects/{project_id}", response_model=schemas.ProjectRead)
+@app.get("/projects/{project_id}", response_model=schemas.ProjectRead, tags=["Projects"])
 def get_project(project_id: int, db: Session = Depends(get_db)):
     proj = crud_mod.get_project(db, project_id)
     if not proj:
@@ -84,15 +86,15 @@ def get_project(project_id: int, db: Session = Depends(get_db)):
     return proj
 
 
-@app.put("/projects/{project_id}", response_model=schemas.ProjectRead)
+@app.put("/projects/{project_id}", response_model=schemas.ProjectRead, tags=["Projects"])
 def update_project(project_id: int, data: schemas.ProjectUpdate, db: Session = Depends(get_db)):
-    proj = crud_mod.update_project(db, project_id, data.dict(exclude_unset=True))
+    proj = crud_mod.update_project(db, project_id, data.model_dump(exclude_unset=True))
     if not proj:
         raise HTTPException(status_code=404, detail="Project not found")
     return proj
 
 
-@app.delete("/projects/{project_id}")
+@app.delete("/projects/{project_id}", tags=["Projects"])
 def delete_project(project_id: int, db: Session = Depends(get_db)):
     ok = crud_mod.delete_project(db, project_id)
     if not ok:
@@ -101,13 +103,13 @@ def delete_project(project_id: int, db: Session = Depends(get_db)):
 
 
 # --- Задачи ---
-@app.post("/tasks/", response_model=schemas.TaskRead)
+@app.post("/tasks/", response_model=schemas.TaskRead, tags=["Tasks"])
 def create_task(data: schemas.TaskCreate, db: Session = Depends(get_db)):
     """Создать задачу"""
-    return crud_mod.create_task(db, data.dict())
+    return crud_mod.create_task(db, data.model_dump())
 
 
-@app.get("/tasks/", response_model=List[schemas.TaskRead])
+@app.get("/tasks/", response_model=List[schemas.TaskRead], tags=["Tasks"])
 def list_tasks(
     db: Session = Depends(get_db),
     project_id: Optional[int] = Query(None),
@@ -134,7 +136,7 @@ def list_tasks(
     return q.all()
 
 
-@app.get("/tasks/aggregate")
+@app.get("/tasks/aggregate", tags=["Tasks"])
 def tasks_aggregate(db: Session = Depends(get_db)):
     """Агрегаты по задачам: count, среднее время"""
     total = db.query(func.count(models.Task.id)).scalar()
@@ -142,7 +144,7 @@ def tasks_aggregate(db: Session = Depends(get_db)):
     return {"count": total or 0, "avg_time": float(avg_time or 0)}
 
 
-@app.get("/tasks/{task_id}", response_model=schemas.TaskRead)
+@app.get("/tasks/{task_id}", response_model=schemas.TaskRead, tags=["Tasks"])
 def get_task(task_id: int, db: Session = Depends(get_db)):
     t = crud_mod.get_task(db, task_id)
     if not t:
@@ -150,15 +152,15 @@ def get_task(task_id: int, db: Session = Depends(get_db)):
     return t
 
 
-@app.put("/tasks/{task_id}", response_model=schemas.TaskRead)
+@app.put("/tasks/{task_id}", response_model=schemas.TaskRead, tags=["Tasks"])
 def update_task(task_id: int, data: schemas.TaskUpdate, db: Session = Depends(get_db)):
-    t = crud_mod.update_task(db, task_id, data.dict(exclude_unset=True))
+    t = crud_mod.update_task(db, task_id, data.model_dump(exclude_unset=True))
     if not t:
         raise HTTPException(status_code=404, detail="Task not found")
     return t
 
 
-@app.delete("/tasks/{task_id}")
+@app.delete("/tasks/{task_id}", tags=["Tasks"])
 def delete_task(task_id: int, db: Session = Depends(get_db)):
     ok = crud_mod.delete_task(db, task_id)
     if not ok:
@@ -167,17 +169,17 @@ def delete_task(task_id: int, db: Session = Depends(get_db)):
 
 
 # --- Комментарии ---
-@app.post("/comments/", response_model=schemas.CommentRead)
+@app.post("/comments/", response_model=schemas.CommentRead, tags=["Comments"])
 def create_comment(data: schemas.CommentCreate, db: Session = Depends(get_db)):
-    return crud_mod.create_comment(db, data.dict())
+    return crud_mod.create_comment(db, data.model_dump())
 
 
-@app.get("/comments/", response_model=List[schemas.CommentRead])
+@app.get("/comments/", response_model=List[schemas.CommentRead], tags=["Comments"])
 def list_comments(db: Session = Depends(get_db)):
     return db.query(models.Comment).all()
 
 
-@app.get("/comments/{comment_id}", response_model=schemas.CommentRead)
+@app.get("/comments/{comment_id}", response_model=schemas.CommentRead, tags=["Comments"])
 def get_comment(comment_id: int, db: Session = Depends(get_db)):
     c = crud_mod.get_comment(db, comment_id)
     if not c:
@@ -185,15 +187,15 @@ def get_comment(comment_id: int, db: Session = Depends(get_db)):
     return c
 
 
-@app.put("/comments/{comment_id}", response_model=schemas.CommentRead)
+@app.put("/comments/{comment_id}", response_model=schemas.CommentRead, tags=["Comments"])
 def update_comment(comment_id: int, data: schemas.CommentUpdate, db: Session = Depends(get_db)):
-    c = crud_mod.update_comment(db, comment_id, data.dict(exclude_unset=True))
+    c = crud_mod.update_comment(db, comment_id, data.model_dump(exclude_unset=True))
     if not c:
         raise HTTPException(status_code=404, detail="Comment not found")
     return c
 
 
-@app.delete("/comments/{comment_id}")
+@app.delete("/comments/{comment_id}", tags=["Comments"])
 def delete_comment(comment_id: int, db: Session = Depends(get_db)):
     ok = crud_mod.delete_comment(db, comment_id)
     if not ok:
@@ -202,17 +204,17 @@ def delete_comment(comment_id: int, db: Session = Depends(get_db)):
 
 
 # --- Вложения ---
-@app.post("/attachments/", response_model=schemas.AttachmentRead)
+@app.post("/attachments/", response_model=schemas.AttachmentRead, tags=["Attachments"])
 def create_attachment(data: schemas.AttachmentCreate, db: Session = Depends(get_db)):
-    return crud_mod.create_attachment(db, data.dict())
+    return crud_mod.create_attachment(db, data.model_dump())
 
 
-@app.get("/attachments/", response_model=List[schemas.AttachmentRead])
+@app.get("/attachments/", response_model=List[schemas.AttachmentRead], tags=["Attachments"])
 def list_attachments(db: Session = Depends(get_db)):
     return db.query(models.Attachment).all()
 
 
-@app.get("/attachments/{attachment_id}", response_model=schemas.AttachmentRead)
+@app.get("/attachments/{attachment_id}", response_model=schemas.AttachmentRead, tags=["Attachments"])
 def get_attachment(attachment_id: int, db: Session = Depends(get_db)):
     a = crud_mod.get_attachment(db, attachment_id)
     if not a:
@@ -220,15 +222,15 @@ def get_attachment(attachment_id: int, db: Session = Depends(get_db)):
     return a
 
 
-@app.put("/attachments/{attachment_id}", response_model=schemas.AttachmentRead)
+@app.put("/attachments/{attachment_id}", response_model=schemas.AttachmentRead, tags=["Attachments"])
 def update_attachment(attachment_id: int, data: schemas.AttachmentUpdate, db: Session = Depends(get_db)):
-    a = crud_mod.update_attachment(db, attachment_id, data.dict(exclude_unset=True))
+    a = crud_mod.update_attachment(db, attachment_id, data.model_dump(exclude_unset=True))
     if not a:
         raise HTTPException(status_code=404, detail="Attachment not found")
     return a
 
 
-@app.delete("/attachments/{attachment_id}")
+@app.delete("/attachments/{attachment_id}", tags=["Attachments"])
 def delete_attachment(attachment_id: int, db: Session = Depends(get_db)):
     ok = crud_mod.delete_attachment(db, attachment_id)
     if not ok:
@@ -237,7 +239,7 @@ def delete_attachment(attachment_id: int, db: Session = Depends(get_db)):
 
 
 # --- Отчёты и демонстрации функций ---
-@app.get("/reports/tasks_with_project")
+@app.get("/reports/tasks_with_project", tags=["Reports"])
 def tasks_with_project(db: Session = Depends(get_db), left: bool = True):
     """Отчёт: задачи с данными проектов. По умолчанию LEFT JOIN."""
     if left:
@@ -256,14 +258,14 @@ def tasks_with_project(db: Session = Depends(get_db), left: bool = True):
     return results
 
 
-@app.get("/reports/project_task_count")
+@app.get("/reports/project_task_count", tags=["Reports"])
 def project_task_count(db: Session = Depends(get_db)):
     """Отчёт: количество задач на проект (LEFT JOIN + GROUP BY)."""
     q = db.query(models.Project.id, models.Project.name, func.count(models.Task.id).label("task_count")).outerjoin(models.Task).group_by(models.Project.id, models.Project.name)
     return [{"project_id": r[0], "project_name": r[1], "task_count": int(r[2])} for r in q.all()]
 
 
-@app.get("/demo/sets")
+@app.get("/demo/sets", tags=["Demo"])
 def demo_set_operations(db: Session = Depends(get_db)):
     """Демонстрация операций множеств: UNION между именами проектов и задач."""
     from sqlalchemy import union_all, select
@@ -275,7 +277,7 @@ def demo_set_operations(db: Session = Depends(get_db)):
     return [r[0] for r in rows]
 
 
-@app.get("/demo/functions")
+@app.get("/demo/functions", tags=["Demo"])
 def demo_functions(db: Session = Depends(get_db)):
     """Демонстрация встроенных функций: UPPER, LEN."""
     q = db.query(models.Project.id, func.upper(models.Project.name), func.length(models.Project.name)).limit(50)

@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from typing import Optional
 from datetime import date, datetime
 
@@ -27,9 +27,7 @@ class ProjectUpdate(BaseModel):
 
 class ProjectRead(ProjectBase):
     id: int
-
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class TaskBase(BaseModel):
@@ -55,9 +53,7 @@ class TaskUpdate(BaseModel):
 
 class TaskRead(TaskBase):
     id: int
-
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class CommentBase(BaseModel):
@@ -82,9 +78,7 @@ class CommentUpdate(BaseModel):
 
 class CommentRead(CommentBase):
     id: int
-
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class AttachmentBase(BaseModel):
@@ -109,6 +103,4 @@ class AttachmentUpdate(BaseModel):
 
 class AttachmentRead(AttachmentBase):
     id: int
-
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
